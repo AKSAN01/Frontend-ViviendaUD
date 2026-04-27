@@ -1,18 +1,15 @@
 @import "tailwindcss";
 
-/* Definimos el nuevo tema claro con azules oscuros */
 @theme {
-  --color-light-bg: #f8fafc; /* Un gris casi blanco, muy limpio */
-  --color-light-card: #ffffff; /* Blanco puro para las tarjetas */
-  --color-light-border: #e2e8f0; /* Bordes suaves */
-  --color-blue-deep: #0f172a; /* Azul marino profundo para textos y degradados */
-  --color-blue-vibrant: #2563eb; /* Azul primario para el final del degradado */
+  --color-light-bg: #f8fafc;
+  --color-light-card: #ffffff;
+  --color-light-border: #e2e8f0;
+  --color-blue-deep: #0f172a;
+  --color-blue-vibrant: #2563eb;
 }
 
-/* Aplicamos el fondo claro por defecto */
 body {
-  background-color: var(--color-light-bg);
-  color: #0f172a; /* Texto oscuro por defecto */
+  color: #0f172a;
   margin: 0;
   font-family: system-ui, -apple-system, sans-serif;
 }
