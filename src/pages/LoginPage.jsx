@@ -28,7 +28,7 @@ export default function LoginPage() {
       localStorage.setItem('token', data.token)
 
       // ¡Aquí ocurre la magia! Redirigimos al dashboard
-      navigate('/dashboard')
+      navigate('/')
 
     } catch (error) {
       console.error(error)
@@ -75,7 +75,7 @@ export default function LoginPage() {
         </form>
 
         <div className="mt-6 text-center text-sm text-gray-600">
-          ¿No tienes cuenta? <a href="#" className="text-blue-vibrant hover:underline font-medium transition-colors duration-300">Regístrate aquí</a>
+          ¿No tienes cuenta? <a href="/register" className="text-blue-vibrant hover:underline font-medium transition-colors duration-300">Regístrate aquí</a>
         </div>
       </div>
     </div>
