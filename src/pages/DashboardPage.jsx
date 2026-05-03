@@ -53,6 +53,13 @@ export default function DashboardPage() {
   const [fechaFin, setFechaFin] = useState('')
   const [isReserving, setIsReserving] = useState(false)
 
+  // Estados del Modal de Crear Vivienda
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [isCreating, setIsCreating] = useState(false)
+  const [nuevaVivienda, setNuevaVivienda] = useState({
+  titulo: '', descripcion: '', precioMensual: '', tipoAlojamiento: 'INDIVIDUAL', latitud: '', longitud: ''
+  })
+
   // Estados del Filtro de Proximidad
   const [universidadId, setUniversidadId] = useState('todas')
   const [distanciaKm, setDistanciaKm] = useState(5)
@@ -156,6 +163,36 @@ export default function DashboardPage() {
     }
   }
 
+  const handleCrearVivienda = async (e) => {
+    e.preventDefault()
+    setIsCreating(true)
+
+    try {
+      const response = await fetch('http://localhost:8081/api/v1/viviendas', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          ...nuevaVivienda,
+          precioMensual: parseFloat(nuevaVivienda.precioMensual),
+          latitud: parseFloat(nuevaVivienda.latitud),
+          longitud: parseFloat(nuevaVivienda.longitud),
+        }),
+      })
+
+      if (!response.ok) throw new Error()
+      const creada = await response.json()
+      setViviendas((prev) => [...prev, creada])
+      setIsCreateModalOpen(false)
+      setNuevaVivienda({ titulo: '', descripcion: '', precioMensual: '', tipoAlojamiento: 'INDIVIDUAL', latitud: '', longitud: '' })
+      alert('¡Vivienda publicada con éxito!')
+    } catch {
+      alert('No se pudo publicar la vivienda. Verifica los datos e intenta de nuevo.')
+    } finally {
+      setIsCreating(false)
+    }
+  }
+  
+
   const universidadActual = UNIVERSIDADES.find((u) => u.id === universidadId)
   const filtroActivo = universidadActual?.lat !== null
 
@@ -170,6 +207,11 @@ export default function DashboardPage() {
           <div className="flex gap-4">
             {isLoggedIn ? (
               <>
+                <button
+                onClick={() => setIsCreateModalOpen(true)}
+                className="bg-blue-vibrant text-white px-4 py-2 rounded-lg font-medium hover:bg-[#1d4ed8] transition shadow-sm">
+                + Publicar Vivienda
+                </button>
                 <button className="bg-blue-50 text-blue-vibrant px-4 py-2 rounded-lg font-medium hover:bg-blue-100 transition">
                   Mis Reservas
                 </button>
@@ -409,6 +451,58 @@ export default function DashboardPage() {
                   }`}
                 >
                   {isReserving ? 'Procesando...' : 'Confirmar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de Crear Vivienda*/}
+      {isCreateModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-8 max-w-lg w-full shadow-2xl">
+            <h3 className="text-2xl font-extrabold text-blue-deep mb-1">Publicar Vivienda</h3>
+            <p className="text-gray-500 text-sm mb-6">Completa los datos de tu alojamiento.</p>
+
+            <form onSubmit={handleCrearVivienda} className="space-y-4">
+              <input required placeholder="Título" value={nuevaVivienda.titulo}
+                onChange={(e) => setNuevaVivienda({ ...nuevaVivienda, titulo: e.target.value })}
+                className="w-full bg-gray-50 border border-light-border rounded-lg px-4 py-2.5 text-blue-deep focus:ring-2 focus:ring-blue-vibrant outline-none" />
+
+              <textarea required placeholder="Descripción" value={nuevaVivienda.descripcion}
+                onChange={(e) => setNuevaVivienda({ ...nuevaVivienda, descripcion: e.target.value })}
+                className="w-full bg-gray-50 border border-light-border rounded-lg px-4 py-2.5 text-blue-deep focus:ring-2 focus:ring-blue-vibrant outline-none resize-none" rows={3} />
+
+              <input required type="number" placeholder="Precio mensual (COP)" value={nuevaVivienda.precioMensual}
+                onChange={(e) => setNuevaVivienda({ ...nuevaVivienda, precioMensual: e.target.value })}
+                className="w-full bg-gray-50 border border-light-border rounded-lg px-4 py-2.5 text-blue-deep focus:ring-2 focus:ring-blue-vibrant outline-none" />
+
+              <select required value={nuevaVivienda.tipoAlojamiento}
+                onChange={(e) => setNuevaVivienda({ ...nuevaVivienda, tipoAlojamiento: e.target.value })}
+                className="w-full bg-gray-50 border border-light-border rounded-lg px-4 py-2.5 text-blue-deep focus:ring-2 focus:ring-blue-vibrant outline-none">
+                <option value="INDIVIDUAL">Individual</option>
+                <option value="COMPARTIDA">Compartida</option>
+                <option value="COMPLETO">Completo</option>
+              </select>
+
+              <div className="flex gap-3">
+                <input required type="number" step="any" placeholder="Latitud (ej: 4.6133)" value={nuevaVivienda.latitud}
+                  onChange={(e) => setNuevaVivienda({ ...nuevaVivienda, latitud: e.target.value })}
+                  className="w-full bg-gray-50 border border-light-border rounded-lg px-4 py-2.5 text-blue-deep focus:ring-2 focus:ring-blue-vibrant outline-none" />
+                <input required type="number" step="any" placeholder="Longitud (ej: -74.0664)" value={nuevaVivienda.longitud}
+                  onChange={(e) => setNuevaVivienda({ ...nuevaVivienda, longitud: e.target.value })}
+                  className="w-full bg-gray-50 border border-light-border rounded-lg px-4 py-2.5 text-blue-deep focus:ring-2 focus:ring-blue-vibrant outline-none" />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button type="button" onClick={() => setIsCreateModalOpen(false)}
+                  className="flex-1 bg-gray-100 text-gray-700 font-semibold py-3 rounded-xl hover:bg-gray-200 transition-colors">
+                  Cancelar
+                </button>
+                <button type="submit" disabled={isCreating}
+                  className={`flex-1 font-semibold py-3 rounded-xl text-white transition-all ${isCreating ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-vibrant hover:bg-[#1d4ed8]'}`}>
+                  {isCreating ? 'Publicando...' : 'Publicar'}
                 </button>
               </div>
             </form>
