@@ -212,9 +212,12 @@ export default function DashboardPage() {
                 className="bg-blue-vibrant text-white px-4 py-2 rounded-lg font-medium hover:bg-[#1d4ed8] transition shadow-sm">
                 + Publicar Vivienda
                 </button>
-                <button className="bg-blue-50 text-blue-vibrant px-4 py-2 rounded-lg font-medium hover:bg-blue-100 transition">
+                <Link 
+                  to="/mis-reservas" 
+                  className="bg-blue-50 text-blue-vibrant px-4 py-2 rounded-lg font-medium hover:bg-blue-100 transition inline-block text-center flex items-center justify-center"
+                >
                   Mis Reservas
-                </button>
+                </Link>
                 <button
                   onClick={handleLogout}
                   className="bg-white border border-light-border text-gray-600 px-4 py-2 rounded-lg hover:bg-red-50 hover:text-red-600 transition shadow-sm font-medium"
