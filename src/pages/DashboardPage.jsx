@@ -1,20 +1,35 @@
 import { useState, useEffect, useMemo } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
+import { MapContainer, TileLayer, Marker, useMapEvents } from 'react-leaflet'
+import 'leaflet/dist/leaflet.css'
+import L from 'leaflet'
+import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png'
+import markerIcon from 'leaflet/dist/images/marker-icon.png'
+import markerShadow from 'leaflet/dist/images/marker-shadow.png'
+
+// Fix del ícono por defecto de Leaflet (bug conocido con Webpack/Vite)
+delete L.Icon.Default.prototype._getIconUrl
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: markerIcon2x,
+  iconUrl: markerIcon,
+  shadowUrl: markerShadow,
+})
+
 
 // ─────────────────────────────────────────────
 // Constantes: Universidades con coordenadas
 // ─────────────────────────────────────────────
 const UNIVERSIDADES = [
-  { id: 'todas',        nombre: 'Todas las ubicaciones',               lat: null,    lng: null },
-  { id: 'macarena',     nombre: 'U. Distrital – Sede Macarena',         lat: 4.6133,  lng: -74.0664 },
-  { id: 'ingenieria',   nombre: 'U. Distrital – Sede Ingeniería',       lat: 4.6280,  lng: -74.0650 },
-  { id: 'uniandes',     nombre: 'Universidad de los Andes',            lat: 4.6015,  lng: -74.0664 },
-  { id: 'javeriana',    nombre: 'Pontificia U. Javeriana',             lat: 4.6281,  lng: -74.0641 },
-  { id: 'rosario',      nombre: 'Universidad del Rosario',             lat: 4.5983,  lng: -74.0739 },
-  { id: 'sabana',       nombre: 'Universidad de La Sabana',            lat: 4.8608,  lng: -74.0355 },
-  { id: 'externado',    nombre: 'Universidad Externado de Colombia',   lat: 4.6093,  lng: -74.0701 },
-  { id: 'ean',          nombre: 'Universidad EAN',                     lat: 4.6524,  lng: -74.0576 },
-  { id: 'bosque',       nombre: 'Universidad El Bosque',               lat: 4.6878,  lng: -74.0477 },
+  { id: 'todas', nombre: 'Todas las ubicaciones', lat: null, lng: null },
+  { id: 'macarena', nombre: 'U. Distrital – Sede Macarena', lat: 4.6133, lng: -74.0664 },
+  { id: 'ingenieria', nombre: 'U. Distrital – Sede Ingeniería', lat: 4.6280, lng: -74.0650 },
+  { id: 'uniandes', nombre: 'Universidad de los Andes', lat: 4.6015, lng: -74.0664 },
+  { id: 'javeriana', nombre: 'Pontificia U. Javeriana', lat: 4.6281, lng: -74.0641 },
+  { id: 'rosario', nombre: 'Universidad del Rosario', lat: 4.5983, lng: -74.0739 },
+  { id: 'sabana', nombre: 'Universidad de La Sabana', lat: 4.8608, lng: -74.0355 },
+  { id: 'externado', nombre: 'Universidad Externado de Colombia', lat: 4.6093, lng: -74.0701 },
+  { id: 'ean', nombre: 'Universidad EAN', lat: 4.6524, lng: -74.0576 },
+  { id: 'bosque', nombre: 'Universidad El Bosque', lat: 4.6878, lng: -74.0477 },
 ]
 
 // ─────────────────────────────────────────────
@@ -37,6 +52,17 @@ function calcularDistanciaKm(lat1, lng1, lat2, lng2) {
   return R * c
 }
 
+function PinArrastrable({ position, onMove }) {
+  useMapEvents({})
+  return position ? (
+    <Marker
+      position={position}
+      draggable
+      eventHandlers={{ dragend: (e) => onMove(e.target.getLatLng()) }}
+    />
+  ) : null
+}
+
 // ─────────────────────────────────────────────
 // Componente Principal
 // ─────────────────────────────────────────────
@@ -45,6 +71,8 @@ export default function DashboardPage() {
   const [viviendas, setViviendas] = useState([])
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [darkMode, setDarkMode] = useState(false)
 
   // Estados del Modal de Reserva
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -57,8 +85,10 @@ export default function DashboardPage() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [isCreating, setIsCreating] = useState(false)
   const [nuevaVivienda, setNuevaVivienda] = useState({
-  titulo: '', descripcion: '', precioMensual: '', tipoAlojamiento: 'INDIVIDUAL', latitud: '', longitud: ''
+    titulo: '', descripcion: '', precioMensual: '', tipoAlojamiento: 'INDIVIDUAL', latitud: '', longitud: ''
   })
+  const [busquedaDireccion, setBusquedaDireccion] = useState('')
+  const [mapCenter, setMapCenter] = useState([4.6133, -74.0664]) // Bogotá por defecto
 
   // Estados del Filtro de Proximidad
   const [universidadId, setUniversidadId] = useState('todas')
@@ -66,6 +96,14 @@ export default function DashboardPage() {
 
   const token = localStorage.getItem('token')
   const isLoggedIn = !!token
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest('#hamburger-menu')) setMenuOpen(false)
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   // ── Fetch de viviendas ──────────────────────
   useEffect(() => {
@@ -163,6 +201,37 @@ export default function DashboardPage() {
     }
   }
 
+  const [direccionConfirmada, setDireccionConfirmada] = useState('')
+  const geocodificarInverso = async (lat, lng) => {
+    try {
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`
+      )
+      const data = await res.json()
+      if (data.display_name) setDireccionConfirmada(data.display_name)
+    } catch {
+      setDireccionConfirmada('No se pudo obtener la dirección.')
+    }
+  }
+
+  const buscarDireccion = async () => {
+    if (!busquedaDireccion.trim()) return
+    try {
+      const query = busquedaDireccion.replace('#', '').replace(/-/g, ' ')
+      const res = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&limit=1&countrycodes=co`
+      )
+      const data = await res.json()
+      if (data.length === 0) return alert('Dirección no encontrada. Intenta ser más específico.')
+      const { lat, lon } = data[0]
+      const coords = [parseFloat(lat), parseFloat(lon)]
+      setMapCenter(coords)
+      setNuevaVivienda((prev) => ({ ...prev, latitud: coords[0], longitud: coords[1] }))
+    } catch {
+      alert('Error al buscar la dirección.')
+    }
+  }
+
   const handleCrearVivienda = async (e) => {
     e.preventDefault()
     setIsCreating(true)
@@ -191,51 +260,83 @@ export default function DashboardPage() {
       setIsCreating(false)
     }
   }
-  
+
 
   const universidadActual = UNIVERSIDADES.find((u) => u.id === universidadId)
   const filtroActivo = universidadActual?.lat !== null
 
+  const txt = darkMode ? 'text-white' : 'text-gray-800'
+  const txtMuted = darkMode ? 'text-gray-400' : 'text-gray-500'
+  const txtTitle = darkMode ? 'text-white' : 'text-blue-deep'
+  const card = darkMode ? 'bg-gray-800 border border-gray-700' : 'bg-white border border-light-border'
+  const panel = darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-light-border'
+
   // ── Render ───────────────────────────────────
   return (
-    <div className="min-h-screen bg-[#f8fafc] p-8 relative">
+    <div className={`min-h-screen p-8 relative transition-colors duration-300 ${darkMode ? 'bg-gray-900 text-white' : 'bg-[#f8fafc] text-gray-800'}`}>
       <div className="max-w-7xl mx-auto">
 
         {/* Navbar Dinámica */}
         <header className="flex justify-between items-center mb-10">
-          <h1 className="text-3xl font-extrabold text-blue-deep tracking-tight">NexoV</h1>
-          <div className="flex gap-4">
-            {isLoggedIn ? (
-              <>
-                <button
-                onClick={() => setIsCreateModalOpen(true)}
-                className="bg-blue-vibrant text-white px-4 py-2 rounded-lg font-medium hover:bg-[#1d4ed8] transition shadow-sm">
-                + Publicar Vivienda
-                </button>
-                <Link 
-                  to="/mis-reservas" 
-                  className="bg-blue-50 text-blue-vibrant px-4 py-2 rounded-lg font-medium hover:bg-blue-100 transition inline-block text-center flex items-center justify-center"
-                >
-                  Mis Reservas
-                </Link>
-                <button
-                  onClick={handleLogout}
-                  className="bg-white border border-light-border text-gray-600 px-4 py-2 rounded-lg hover:bg-red-50 hover:text-red-600 transition shadow-sm font-medium"
-                >
-                  Cerrar Sesión
-                </button>
-              </>
-            ) : (
+          <h1 className="text-3xl font-extrabold ${txtTitle} tracking-tight">NexoV</h1>
+          <div className="flex gap-4 items-center">
+            {!isLoggedIn && (
               <>
                 <Link to="/login" className="text-blue-deep font-medium px-4 py-2 hover:text-blue-vibrant transition">
                   Iniciar Sesión
                 </Link>
-                <Link
-                  to="/register"
-                  className="bg-blue-vibrant text-white px-5 py-2 rounded-lg font-medium hover:bg-[#1d4ed8] hover:shadow-lg hover:-translate-y-0.5 transition-all"
-                >
+                <Link to="/register" className="bg-blue-vibrant text-white px-5 py-2 rounded-lg font-medium hover:bg-[#1d4ed8] hover:shadow-lg hover:-translate-y-0.5 transition-all">
                   Regístrate
                 </Link>
+              </>
+            )}
+
+            {isLoggedIn && (
+              <>
+                <button
+                  onClick={() => setDarkMode(!darkMode)}
+                  className={`px-3 py-2 rounded-lg font-medium border transition ${darkMode ? 'bg-gray-700 text-yellow-300 border-gray-600' : 'bg-white text-gray-600 border-light-border'}`}
+                >
+                  {darkMode ? '☀️ Claro' : '🌙 Oscuro'}
+                </button>
+                <button
+                  onClick={() => setIsCreateModalOpen(true)}
+                  className="bg-blue-vibrant text-white px-4 py-2 rounded-lg font-medium hover:bg-[#1d4ed8] transition shadow-sm"
+                >
+                  + Publicar Vivienda
+                </button>
+                <div id="hamburger-menu" className="relative">
+                  <button
+                    onClick={() => setMenuOpen(!menuOpen)}
+                    className={`flex flex-col justify-center items-center gap-1.5 w-10 h-10 rounded-lg border transition ${darkMode ? 'border-gray-600 bg-gray-700 hover:bg-gray-600' : 'border-light-border bg-white hover:bg-gray-50'}`}
+                  >
+                    <span className={`block w-5 h-0.5 transition-all duration-300 ${darkMode ? 'bg-white' : 'bg-gray-600'} ${menuOpen ? 'rotate-45 translate-y-2' : ''}`} />
+                    <span className={`block w-5 h-0.5 transition-all duration-300 ${darkMode ? 'bg-white' : 'bg-gray-600'} ${menuOpen ? 'opacity-0' : ''}`} />
+                    <span className={`block w-5 h-0.5 transition-all duration-300 ${darkMode ? 'bg-white' : 'bg-gray-600'} ${menuOpen ? '-rotate-45 -translate-y-2' : ''}`} />
+                  </button>
+
+                  {menuOpen && (
+                    <div className={`absolute right-0 mt-2 w-48 rounded-xl shadow-lg border overflow-hidden z-50 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-light-border'}`}>
+                      <button className={`w-full text-left px-4 py-3 text-sm font-medium flex items-center gap-2 transition ${darkMode ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-50'}`}>
+                        👤 Mi Perfil
+                      </button>
+                      <Link
+                        to="/mis-reservas"
+                        onClick={() => setMenuOpen(false)}
+                        className={`w-full text-left px-4 py-3 text-sm font-medium flex items-center gap-2 transition ${darkMode ? 'text-gray-200 hover:bg-gray-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                      >
+                        📋 Mis Reservas
+                      </Link>
+                      <div className={`border-t ${darkMode ? 'border-gray-700' : 'border-gray-100'}`} />
+                      <button
+                        onClick={handleLogout}
+                        className={`w-full text-left px-4 py-3 text-sm font-medium flex items-center gap-2 transition ${darkMode ? 'text-red-400 hover:bg-gray-700' : 'text-red-500 hover:bg-red-50'}`}
+                      >
+                        🚪 Cerrar Sesión
+                      </button>
+                    </div>
+                  )}
+                </div>
               </>
             )}
           </div>
@@ -243,17 +344,17 @@ export default function DashboardPage() {
 
         {/* Encabezado + Filtro de Proximidad */}
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-gray-800 mb-1">Alojamientos Disponibles</h2>
-          <p className="text-gray-500 text-lg mb-6">
+          <h2 className="text-3xl font-bold ${txt} mb-1">Alojamientos Disponibles</h2>
+          <p className="${txtMuted} text-lg mb-6">
             Explora opciones ideales para tu semestre universitario.
           </p>
 
           {/* ── Panel de Filtros ── */}
-          <div className="bg-white border border-light-border rounded-2xl p-5 shadow-sm flex flex-col md:flex-row gap-6 items-start md:items-end">
+          <div className="${panel} rounded-2xl p-5 card-glow flex flex-col md:flex-row gap-6 items-start md:items-end">
 
             {/* Selector de Universidad */}
             <div className="flex-1 min-w-0">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold ${txtMuted} uppercase tracking-wider mb-2">
                 📍 Filtrar por universidad
               </label>
               <select
@@ -271,7 +372,7 @@ export default function DashboardPage() {
 
             {/* Slider de Distancia */}
             <div className="flex-1 min-w-0">
-              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2">
+              <label className="block text-xs font-semibold ${txtMuted} uppercase tracking-wider mb-2">
                 🗺️ Radio máximo:{' '}
                 <span className={`text-blue-vibrant ${!filtroActivo ? 'opacity-40' : ''}`}>
                   {distanciaKm} km
@@ -350,32 +451,38 @@ export default function DashboardPage() {
               const distancia =
                 filtroActivo && vivienda.latitud != null
                   ? calcularDistanciaKm(
-                      universidadActual.lat,
-                      universidadActual.lng,
-                      vivienda.latitud,
-                      vivienda.longitud
-                    ).toFixed(1)
+                    universidadActual.lat,
+                    universidadActual.lng,
+                    vivienda.latitud,
+                    vivienda.longitud
+                  ).toFixed(1)
                   : null
 
               return (
                 <div
                   key={vivienda.id}
-                  className="bg-white rounded-2xl p-6 shadow-sm border border-light-border hover:shadow-xl hover:-translate-y-1 transition-all duration-300"
+                  className="${card} rounded-2xl p-6 card-glow"
                 >
+                  <div className="aspect-video w-full bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl mb-4 flex items-center justify-center overflow-hidden">
+                    <span className="text-4xl opacity-30">🏠</span>
+                  </div>
                   <div className="flex justify-between items-start mb-4">
-                    <span className="bg-blue-100 text-blue-vibrant text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider">
+                    <span className={`text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wider ${vivienda.tipoAlojamiento === 'COMPLETO' ? 'bg-green-100 text-green-700' :
+                      vivienda.tipoAlojamiento === 'COMPARTIDA' ? 'bg-purple-100 text-purple-700' :
+                        'bg-blue-100 text-blue-vibrant'
+                      }`}>
                       {vivienda.tipoAlojamiento}
                     </span>
-                    <span className="text-2xl font-extrabold text-gray-800">
+                    <span className="text-2xl font-extrabold ${txt}">
                       ${vivienda.precioMensual.toLocaleString('es-CO')}{' '}
-                      <span className="text-sm text-gray-500 font-normal">/mes</span>
+                      <span className="text-sm ${txtMuted}} font-normal">/mes</span>
                     </span>
                   </div>
 
-                  <h3 className="text-xl font-bold text-blue-deep mb-2 line-clamp-1">
+                  <h3 className="text-xl font-bold ${txtTitle} mb-2 line-clamp-1">
                     {vivienda.titulo}
                   </h3>
-                  <p className="text-gray-500 text-sm mb-3 line-clamp-2 min-h-[40px]">
+                  <p className="${txtMuted} text-sm mb-3 line-clamp-2 min-h-[40px]">
                     {vivienda.descripcion}
                   </p>
 
@@ -449,9 +556,8 @@ export default function DashboardPage() {
                 <button
                   type="submit"
                   disabled={isReserving}
-                  className={`flex-1 font-semibold py-3 rounded-xl text-white transition-all ${
-                    isReserving ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-vibrant hover:bg-[#1d4ed8]'
-                  }`}
+                  className={`flex-1 font-semibold py-3 rounded-xl text-white transition-all ${isReserving ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-vibrant hover:bg-[#1d4ed8]'
+                    }`}
                 >
                   {isReserving ? 'Procesando...' : 'Confirmar'}
                 </button>
@@ -489,13 +595,48 @@ export default function DashboardPage() {
                 <option value="COMPLETO">Completo</option>
               </select>
 
-              <div className="flex gap-3">
-                <input required type="number" step="any" placeholder="Latitud (ej: 4.6133)" value={nuevaVivienda.latitud}
-                  onChange={(e) => setNuevaVivienda({ ...nuevaVivienda, latitud: e.target.value })}
-                  className="w-full bg-gray-50 border border-light-border rounded-lg px-4 py-2.5 text-blue-deep focus:ring-2 focus:ring-blue-vibrant outline-none" />
-                <input required type="number" step="any" placeholder="Longitud (ej: -74.0664)" value={nuevaVivienda.longitud}
-                  onChange={(e) => setNuevaVivienda({ ...nuevaVivienda, longitud: e.target.value })}
-                  className="w-full bg-gray-50 border border-light-border rounded-lg px-4 py-2.5 text-blue-deep focus:ring-2 focus:ring-blue-vibrant outline-none" />
+              <div className="space-y-2">
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                  Ubicación
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Busca la dirección (ej: Calle 45 #13-20, Bogotá)"
+                    value={busquedaDireccion}
+                    onChange={(e) => setBusquedaDireccion(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), buscarDireccion())}
+                    className="flex-1 bg-gray-50 border border-light-border rounded-lg px-4 py-2.5 text-blue-deep focus:ring-2 focus:ring-blue-vibrant outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={buscarDireccion}
+                    className="bg-blue-vibrant text-white px-4 py-2.5 rounded-lg font-semibold hover:bg-[#1d4ed8] transition shrink-0"
+                  >
+                    Buscar
+                  </button>
+                </div>
+
+                {/* Mapa */}
+                <div className="rounded-xl overflow-hidden border border-light-border" style={{ height: '220px' }}>
+                  <MapContainer center={mapCenter} zoom={15} style={{ height: '100%', width: '100%' }} key={mapCenter.toString()}>
+                    <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                    <PinArrastrable
+                      position={nuevaVivienda.latitud ? [nuevaVivienda.latitud, nuevaVivienda.longitud] : mapCenter}
+                      onMove={(latlng) => {
+                        setNuevaVivienda((prev) => ({ ...prev, latitud: latlng.lat, longitud: latlng.lng }))
+                        geocodificarInverso(latlng.lat, latlng.lng)
+                      }}
+                    />
+                  </MapContainer>
+                </div>
+
+                {nuevaVivienda.latitud && (
+                  <div className="text-xs text-gray-400 space-y-0.5">
+                    <p className="text-right">📍 {Number(nuevaVivienda.latitud).toFixed(5)}, {Number(nuevaVivienda.longitud).toFixed(5)}</p>
+                    {direccionConfirmada && <p className="text-green-600 font-medium">✔ {direccionConfirmada}</p>}
+                  </div>
+                )}
               </div>
 
               <div className="flex gap-3 pt-2">
